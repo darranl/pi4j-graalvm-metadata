@@ -4,8 +4,9 @@
 #
 # Prerequisites:
 #   - podman available on the host
-#   - access to the default graalvm-pi-builder image (pulled automatically from ghcr.io);
-#     set GRAALVM_PI_BUILDER_IMAGE to override with a locally built image
+#   - access to the default graalvm-pi-builder image, the tag pinned in graalvm-pi-builder.env
+#     (pulled automatically from ghcr.io); set GRAALVM_PI_BUILDER_IMAGE to override with a
+#     locally built image
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
