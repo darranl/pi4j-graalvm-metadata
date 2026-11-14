@@ -8,7 +8,9 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEFAULT_IMAGE="ghcr.io/lofthouse-dev/graalvm-pi-builder:bookworm-graal25"
+# Default image: the tag pinned in graalvm-pi-builder.env (the same one CI uses). The pin file is
+# read in a subshell so it cannot clobber the caller's GRAALVM_PI_BUILDER_IMAGE override.
+DEFAULT_IMAGE="$(. "$REPO_ROOT/graalvm-pi-builder.env" && printf '%s' "$GRAALVM_PI_BUILDER_IMAGE")"
 IMAGE="${GRAALVM_PI_BUILDER_IMAGE:-$DEFAULT_IMAGE}"
 OUTPUT_DIR="${1:-$REPO_ROOT/generated-config}"
 PROBE_JAR="$REPO_ROOT/probe/target/probe.jar"

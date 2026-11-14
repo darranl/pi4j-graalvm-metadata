@@ -34,8 +34,8 @@ version — it is encoded in the artifactId (`graal25` = GraalVM major 25.x.y).
 
 | Purpose | Image |
 |---|---|
-| Local dev | `ghcr.io/lofthouse-dev/graalvm-pi-builder:latest` (built with `make build-dev`) |
-| CI | `ghcr.io/lofthouse-dev/graalvm-pi-builder:bookworm-25.5.5.0.3` (version-pinned; see upgrade guide in Readme.md) |
+| Default (local, CI and release) | `ghcr.io/lofthouse-dev/graalvm-pi-builder:bookworm-25.5.5.0.3` — version-pinned in `graalvm-pi-builder.env`, the single place the tag is defined (see upgrade guide in Readme.md) |
+| Local override | set `GRAALVM_PI_BUILDER_IMAGE`, e.g. `ghcr.io/lofthouse-dev/graalvm-pi-builder:latest` (built with `make build-dev` in graalvm-pi-builder) |
 
 The container is `debian:bookworm` + GraalVM CE 25 + `libi2c-dev` + (previously JBang, now
 unused for this project). Built in `graalvm-pi-builder/` in the iron-j repo.
