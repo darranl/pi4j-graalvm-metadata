@@ -12,7 +12,7 @@
 # Exit status:
 #   0  identical (byte-for-byte, or the same content once normalised)
 #   1  the content differs (a unified diff of the normalised files is printed)
-#   2  usage error or unreadable/invalid input
+#   2  usage error, or an input that is missing, empty or not a valid JSON object
 set -euo pipefail
 
 if [[ $# -ne 2 ]]; then
@@ -25,6 +25,16 @@ GENERATED="$2"
 for f in "$RELEASED" "$GENERATED"; do
     if [[ ! -s "$f" ]]; then
         echo "ERROR: $f does not exist or is empty" >&2
+        exit 2
+    fi
+done
+
+# Validate both inputs before anything else, including before the byte-equality shortcut: two
+# identical but corrupt files (an error page, a truncated download) must not pass as "identical
+# metadata". The metadata is a JSON object.
+for f in "$RELEASED" "$GENERATED"; do
+    if ! jq -e 'type == "object"' "$f" > /dev/null 2>&1; then
+        echo "ERROR: $f is not a valid JSON object" >&2
         exit 2
     fi
 done
@@ -45,8 +55,8 @@ normalise() {
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-normalise "$RELEASED" > "$TMP/released.json" || { echo "ERROR: $RELEASED is not valid JSON" >&2; exit 2; }
-normalise "$GENERATED" > "$TMP/generated.json" || { echo "ERROR: $GENERATED is not valid JSON" >&2; exit 2; }
+normalise "$RELEASED" > "$TMP/released.json"
+normalise "$GENERATED" > "$TMP/generated.json"
 
 if cmp -s "$TMP/released.json" "$TMP/generated.json"; then
     echo "RESULT: identical content (only formatting or ordering differs)"
