@@ -3,7 +3,7 @@ description: Installs Podman and loads the graalvm-pi-builder image (from cache 
 
 inputs:
   image:
-    description: Full container image reference (e.g. ghcr.io/lofthouse-dev/graalvm-pi-builder:bookworm-25.3.4.1)
+    description: Full container image reference (e.g. ghcr.io/lofthouse-dev/graalvm-pi-builder:bookworm-25.5.5.0.3)
     required: true
 
 runs:

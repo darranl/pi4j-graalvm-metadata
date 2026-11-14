@@ -21,9 +21,9 @@ Full background: `notes/pi4j-graalvm-metadata-project.md` (in the iron-j repo).
 
 | Module | Artifact | Notes |
 |---|---|---|
-| Parent | `dev.lofthouse.pi4j:pi4j-ffm-metadata-parent:4.0.1-0:pom` | Published |
-| Probe | `dev.lofthouse.pi4j:pi4j-ffm-metadata-probe:4.0.1-0:jar` | Not published; internal build tool |
-| **Metadata** | **`dev.lofthouse.pi4j:pi4j-ffm-metadata-bookworm-graal25:4.0.1-0:jar`** | Latest published (2026-05-17); captured against Pi4J 4.0.1 |
+| Parent | `dev.lofthouse.pi4j:pi4j-ffm-metadata-parent:4.0.2-0:pom` | Published |
+| Probe | `dev.lofthouse.pi4j:pi4j-ffm-metadata-probe:4.0.2-0:jar` | Not published; internal build tool |
+| **Metadata** | **`dev.lofthouse.pi4j:pi4j-ffm-metadata-bookworm-graal25:4.0.2-0:jar`** | Latest published (2026-09-19); captured against Pi4J 4.0.2 |
 
 **Versioning:** `<pi4j-version>-<metadata-patch>`. GraalVM patch version is NOT in the Maven
 version — it is encoded in the artifactId (`graal25` = GraalVM major 25.x.y).
@@ -35,7 +35,7 @@ version — it is encoded in the artifactId (`graal25` = GraalVM major 25.x.y).
 | Purpose | Image |
 |---|---|
 | Local dev | `ghcr.io/lofthouse-dev/graalvm-pi-builder:latest` (built with `make build-dev`) |
-| CI | `ghcr.io/lofthouse-dev/graalvm-pi-builder:bookworm-25.3.4.1` (version-pinned; see upgrade guide in Readme.md) |
+| CI | `ghcr.io/lofthouse-dev/graalvm-pi-builder:bookworm-25.5.5.0.3` (version-pinned; see upgrade guide in Readme.md) |
 
 The container is `debian:bookworm` + GraalVM CE 25 + `libi2c-dev` + (previously JBang, now
 unused for this project). Built in `graalvm-pi-builder/` in the iron-j repo.
