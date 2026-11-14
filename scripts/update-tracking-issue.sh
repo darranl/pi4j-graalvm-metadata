@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Keep the single tracking issue for metadata drift and newer versions up to date.
 #
-# Usage: update-tracking-issue.sh <drift:true|false> <updates:true|false> <report-file> <run-url>
+# Usage: update-tracking-issue.sh <drift:true|false> <updates:true|false> <lookups-complete:true|false> <report-file> <run-url>
 #
 # There is exactly one tracking issue, found by its label rather than created per run. It is
 # needed when the captured metadata differs from the latest release (drift) or when a newer Pi4J
@@ -13,19 +13,23 @@
 #   not needed, issue open     comment that it is resolved, then close it
 #   not needed, issue closed   nothing
 #
+# "Not needed" requires that the version lookups were complete. When a lookup failed and nothing
+# is found, the state is unknown, so an open issue is left alone rather than closed.
+#
 # Requires the GitHub CLI (gh) with GH_TOKEN (issues: write) and GITHUB_REPOSITORY. Set
 # DRY_RUN=1 to print the gh commands instead of running them; with DRY_RUN, EXISTING_ISSUE
 # ("<number> <OPEN|CLOSED>" or empty) stands in for the lookup, so every case can be tested.
 set -euo pipefail
 
-if [[ $# -ne 4 ]]; then
-    echo "Usage: $(basename "$0") <drift:true|false> <updates:true|false> <report-file> <run-url>" >&2
+if [[ $# -ne 5 ]]; then
+    echo "Usage: $(basename "$0") <drift:true|false> <updates:true|false> <lookups-complete:true|false> <report-file> <run-url>" >&2
     exit 2
 fi
 DRIFT="$1"
 UPDATES="$2"
-REPORT="$3"
-RUN_URL="$4"
+COMPLETE="$3"
+REPORT="$4"
+RUN_URL="$5"
 
 LABEL="metadata-drift"
 TITLE="Pi4J metadata: release or version update needed"
@@ -78,6 +82,8 @@ if [[ "$NEEDED" == "true" ]]; then
         run_gh issue reopen "$NUMBER" --comment "Reopened: attention is needed again. See the updated description. Run: $RUN_URL"
         run_gh issue edit "$NUMBER" --body-file "$BODY_FILE"
     fi
+elif [[ "$COMPLETE" != "true" ]]; then
+    echo "Leaving the tracking issue as it is: a version lookup failed, so \"nothing to report\" is unknown."
 else
     if [[ -n "$EXISTING" && "$STATE" == "OPEN" ]]; then
         run_gh issue close "$NUMBER" --reason completed \

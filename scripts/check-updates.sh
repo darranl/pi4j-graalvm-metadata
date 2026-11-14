@@ -9,13 +9,18 @@
 # Usage: check-updates.sh
 #
 # Prints one "- ..." line per newer version found and nothing when everything is current.
-# Always exits 0: a failed lookup is reported as a ::warning:: on stderr and does not count as a
-# finding, so a network problem cannot be mistaken for an update.
+#
+# Exit status:
+#   0  both lookups completed (stdout lists any newer versions)
+#   3  at least one lookup failed; reported as a ::warning:: on stderr. Findings from the lookups
+#      that did succeed are still printed. A caller must not treat "no output" as "up to date" in
+#      this case, so a network problem can neither raise nor close a report by itself.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-warn() { echo "::warning::check-updates: $*" >&2; }
+INCOMPLETE=0
+warn() { echo "::warning::check-updates: $*" >&2; INCOMPLETE=1; }
 
 # True when $1 is a strictly lower version than $2 (version sort).
 older() {
@@ -59,4 +64,7 @@ else
     fi
 fi
 
+if [[ "$INCOMPLETE" -ne 0 ]]; then
+    exit 3
+fi
 exit 0

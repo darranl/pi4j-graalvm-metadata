@@ -3,9 +3,11 @@
 #
 # Usage: compare-metadata.sh <released.json> <generated.json>
 #
-# The comparison is normalised: object keys are sorted and every array is sorted, so a change in
-# key order, array order or formatting is not reported as a difference. The order of entries in
-# reachability metadata has no meaning.
+# The comparison is normalised, so a change in formatting, in the order of object keys, or in the
+# order of the entries of a collection is not reported as a difference. Collections are arrays whose
+# elements are all objects (the downcall and resource lists); their order has no meaning.
+# Arrays of scalars are positional and are NOT sorted: parameterTypes is a signature, so
+# (jint, jlong) and (jlong, jint) are different downcalls.
 #
 # Exit status:
 #   0  identical (byte-for-byte, or the same content once normalised)
@@ -33,7 +35,11 @@ if cmp -s "$RELEASED" "$GENERATED"; then
 fi
 
 normalise() {
-    jq -S 'walk(if type == "array" then sort_by(tojson) else . end)' "$1"
+    jq -S '
+      def canon_keys: walk(if type == "object" then (to_entries | sort_by(.key) | from_entries) else . end);
+      canon_keys
+      | walk(if type == "array" and length > 0 and all(.[]; type == "object")
+             then sort_by(tojson) else . end)' "$1"
 }
 
 TMP="$(mktemp -d)"
@@ -49,6 +55,6 @@ fi
 
 echo "RESULT: DIFFERENT - the captured metadata no longer matches the latest release"
 echo
-echo "Unified diff of the normalised files (sorted keys and arrays; - released, + generated):"
+echo "Unified diff of the normalised files (sorted keys and collections; - released, + generated):"
 diff -u --label released --label generated "$TMP/released.json" "$TMP/generated.json" || true
 exit 1

@@ -22,16 +22,19 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENTRY="META-INF/native-image/com.pi4j/pi4j-plugin-ffm/reachability-metadata.json"
 OWNER_REPO="${GITHUB_REPOSITORY:-lofthouse-dev/pi4j-graalvm-metadata}"
 
-ARTIFACT_ID="$(sed -n 's|.*<artifactId>\(pi4j-ffm-metadata-bookworm-graal[0-9]*\)</artifactId>.*|\1|p' \
-    "$REPO_ROOT/metadata/pom.xml" | head -n 1)"
-if [[ -z "$ARTIFACT_ID" ]]; then
-    echo "ERROR: could not read the metadata artifactId from metadata/pom.xml" >&2
-    exit 1
-fi
-
 VERSION="$(git -C "$REPO_ROOT" tag --list '[0-9]*' --sort=-v:refname | head -n 1)"
 if [[ -z "$VERSION" ]]; then
     echo "ERROR: no release tag found (is this a full clone with tags? use fetch-depth: 0)" >&2
+    exit 1
+fi
+
+# The artifactId is read from the release's own pom (at its tag), not the current checkout: after
+# a major GraalVM upgrade (graal25 -> graal26) the current pom names an artifact that the latest
+# release does not contain.
+ARTIFACT_ID="$(git -C "$REPO_ROOT" show "${VERSION}:metadata/pom.xml" \
+    | sed -n 's|.*<artifactId>\(pi4j-ffm-metadata-bookworm-graal[0-9]*\)</artifactId>.*|\1|p' | head -n 1)"
+if [[ -z "$ARTIFACT_ID" ]]; then
+    echo "ERROR: could not read the metadata artifactId from metadata/pom.xml at tag $VERSION" >&2
     exit 1
 fi
 

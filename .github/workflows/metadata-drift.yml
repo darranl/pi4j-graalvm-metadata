@@ -3,6 +3,12 @@ name: Metadata drift
 # Regenerates the captured metadata on the pinned graalvm-pi-builder image and compares it with
 # the metadata in the latest release. Also reports newer Pi4J and graalvm-pi-builder versions.
 # Report-only: it never releases anything (releases are manual, see RELEASING.md).
+#
+# Three jobs, so that code from a pull request never runs with issue-write access:
+#   drift    generates and compares; read-only token, credentials not persisted in git config
+#   report   updates the tracking issue; the only job with issues: write, and it runs only on
+#            scheduled runs and manual runs that ask for it, never on pull requests
+#   verdict  fails the run when the metadata differs (or a job above failed)
 on:
   workflow_dispatch:
     inputs:
@@ -17,10 +23,12 @@ on:
     paths:
       - graalvm-pi-builder.env
       - pom.xml
+      - metadata/pom.xml
       - probe/**
       - scripts/*-metadata.sh
       - scripts/check-updates.sh
       - scripts/update-tracking-issue.sh
+      - .github/actions/**
       - .github/workflows/metadata-drift.yml
 
 concurrency:
@@ -29,18 +37,25 @@ concurrency:
 
 permissions:
   contents: read
-  packages: read
-  issues: write
 
 jobs:
   drift:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      ready: ${{ steps.report.outcome == 'success' }}
+      drift: ${{ steps.compare.outputs.drift }}
+      updates: ${{ steps.updates.outputs.updates }}
+      lookups_complete: ${{ steps.updates.outputs.lookups_complete }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0   # the latest release is the highest version tag
+          persist-credentials: false
 
       - name: Select graalvm-pi-builder image
         # graalvm-pi-builder.env is the single place the image tag is pinned.
@@ -87,8 +102,8 @@ jobs:
       - name: Compare with the latest release
         id: compare
         run: |
-          # Record the outcome instead of failing here, so the report and the tracking issue are
-          # still produced; the last step fails the run when the content differs.
+          # Record the outcome instead of failing here, so the report is still produced; the
+          # verdict job fails the run when the content differs.
           set +e
           scripts/compare-metadata.sh drift/released.json drift/generated.json > drift/compare.txt
           status=$?
@@ -106,8 +121,20 @@ jobs:
       - name: Check for newer versions
         id: updates
         run: |
+          # Exit 3 means a lookup failed: record that, so "no output" is not read as "up to date".
+          set +e
           scripts/check-updates.sh > drift/updates.txt
+          status=$?
+          set -e
           cat drift/updates.txt
+          if [ "$status" -eq 0 ]; then
+            echo "lookups_complete=true" >> "$GITHUB_OUTPUT"
+          elif [ "$status" -eq 3 ]; then
+            echo "lookups_complete=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::check-updates.sh failed with status $status"
+            exit "$status"
+          fi
           if [ -s drift/updates.txt ]; then
             echo "updates=true" >> "$GITHUB_OUTPUT"
           else
@@ -116,11 +143,14 @@ jobs:
 
       - name: Write the report
         id: report
+        env:
+          RELEASED_VERSION: ${{ steps.released.outputs.version }}
+          LOOKUPS_COMPLETE: ${{ steps.updates.outputs.lookups_complete }}
         run: |
           {
             echo "## Metadata drift report"
             echo
-            echo "- Latest release: \`${{ steps.released.outputs.version }}\`"
+            echo "- Latest release: \`${RELEASED_VERSION}\`"
             echo "- Builder image: \`${GRAALVM_PI_BUILDER_IMAGE}\`"
             echo
             echo "### Comparison with the latest release"
@@ -133,8 +163,12 @@ jobs:
             echo
             if [ -s drift/updates.txt ]; then
               cat drift/updates.txt
-            else
+            elif [ "$LOOKUPS_COMPLETE" = "true" ]; then
               echo "None: Pi4J and graalvm-pi-builder are current."
+            fi
+            if [ "$LOOKUPS_COMPLETE" != "true" ]; then
+              echo
+              echo "**Version lookup incomplete:** at least one lookup failed (see the run's warnings), so this section may be missing newer versions."
             fi
           } > drift/report.md
           cat drift/report.md >> "$GITHUB_STEP_SUMMARY"
@@ -147,20 +181,64 @@ jobs:
           path: drift/
           if-no-files-found: ignore
 
+  report:
+    # Only scheduled runs and manual runs that ask for it; never pull requests.
+    needs: drift
+    if: >-
+      always() && needs.drift.outputs.ready == 'true' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && inputs.open_issue))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download the report
+        uses: actions/download-artifact@v4
+        with:
+          name: metadata-drift
+          path: drift
+
       - name: Update the tracking issue
-        # Only scheduled runs and manual runs that ask for it; never pull requests.
-        if: steps.report.conclusion == 'success' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.open_issue))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRIFT: ${{ needs.drift.outputs.drift }}
+          UPDATES: ${{ needs.drift.outputs.updates }}
+          LOOKUPS_COMPLETE: ${{ needs.drift.outputs.lookups_complete }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           scripts/update-tracking-issue.sh \
-            "${{ steps.compare.outputs.drift }}" \
-            "${{ steps.updates.outputs.updates }}" \
-            drift/report.md \
-            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            "$DRIFT" "$UPDATES" "$LOOKUPS_COMPLETE" drift/report.md "$RUN_URL"
 
-      - name: Fail if the metadata differs
-        if: steps.compare.outputs.drift == 'true'
+  verdict:
+    needs: [drift, report]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+
+    steps:
+      - name: Fail if the metadata differs or a job failed
+        env:
+          DRIFT_RESULT: ${{ needs.drift.result }}
+          REPORT_RESULT: ${{ needs.report.result }}
+          DRIFT: ${{ needs.drift.outputs.drift }}
         run: |
-          echo "::error::The captured metadata differs from release ${{ steps.released.outputs.version }}; a new metadata release is needed (see RELEASING.md)."
-          exit 1
+          if [ "$DRIFT_RESULT" != "success" ]; then
+            echo "::error::The drift job did not succeed ($DRIFT_RESULT)."
+            exit 1
+          fi
+          if [ "$REPORT_RESULT" = "failure" ] || [ "$REPORT_RESULT" = "cancelled" ]; then
+            echo "::error::The tracking issue job did not succeed ($REPORT_RESULT)."
+            exit 1
+          fi
+          if [ "$DRIFT" = "true" ]; then
+            echo "::error::The captured metadata differs from the latest release; a new metadata release is needed (see RELEASING.md). See the report in the job summary of the drift job."
+            exit 1
+          fi
+          echo "Metadata matches the latest release."
